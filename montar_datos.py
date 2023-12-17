@@ -5,6 +5,8 @@ from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import pandas as pd
 
+# hola 
+
 class TimeSeriesDataset(Dataset):
     def __init__(self, train_ratio=0.75, validation_ratio=0.15, limite_capado=3, longitud_secuencia=5):
         # Initialize an empty dataset
