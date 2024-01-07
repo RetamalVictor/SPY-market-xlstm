@@ -5,8 +5,6 @@ from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import pandas as pd
 
-# hola 
-
 class TimeSeriesDataset(Dataset):
     def __init__(self, train_ratio=0.75, validation_ratio=0.15, limite_capado=3, longitud_secuencia=5):
         # Initialize an empty dataset
@@ -48,7 +46,7 @@ class TimeSeriesDataset(Dataset):
         label=None
         # var_inc.append(inc)
         if nombre_serie == 'sp50.xlsx':   # inc en fwd será el label
-            label = self.shift(incremento_cero_uno, -1)
+            label = self.shift(incremento_cero_uno, -self.longitud_secuencia)
         # p_mm_norm = halla_posicion(la_serie, n)
         # var_p_mm.append(p_mm_norm)
 
@@ -114,23 +112,53 @@ class TimeSeriesDataset(Dataset):
             datos, label = self.preprocesar_datos(datos=entrada,nombre_serie=esta_serie)
             datos = datos.astype(np.float32)
             datos_tensor = torch.from_numpy(datos)
-            # if label is not None:
-            #     label = label.astype(np.float32)
-            #     label_tensor = torch.from_numpy(label)
+            if label is not None:
+                label = label.astype(np.float32)
+                self.label_final = torch.from_numpy(label[:self.X_multivariables.shape[1]])
+                # self.crear_secuencias_label(label_tensor, self.longitud_secuencia)
+                # datos sp500: 0.5, 0.8333, 0.0164, 0.8702, 0.9019, 0.5719
         # extraer datos y label
         # crear secuencias
         # [N, longitud_sequencia, forma_input]
             self.crear_secuencias(datos_tensor, self.longitud_secuencia)
+        # No olvides la label
+        # Tensor_X = Tensor_X.permute(2, 1, 0)
+        self.X_multivariables = self.X_multivariables.permute(2, 1, 0)
+        # tenemos [numero_input_feat, numero_muestras, longitud_secuencia]
+
+    def crear_secuencias_label(self, label, longitud_secuencia):
+        # y = [] # Esta lista es interna en la funcion. Solo para una variable
+        # for i in range(longitud_secuencia, len(label)):
+        #     seq = label[i]        
+        #     y.append(seq)
+        y = label[longitud_secuencia:]
+        # 0.2997, 0.4621, 0.9325
+        if self.label_final is None:
+            # Generalizar en el futuro
+            self.label_final = y[:self.X_multivariables.shape[1]].unsqueeze(0)
+        else:
+            self.label_final = torch.cat((self.label_final, y.unsqueeze(0)))
+
+        # print(len(y))
+        # empieza en dia 5,
+        # acaba en dia 291, 
+        # longitud secuencia 5
+
+        # range(donde empieza (longitud de secuencia), donde acaba, 1)
+        # dia 0, dia 1, dia 2, dia 3 -> dia 4
+        # dia 1, dia 2, dia 3, dia 4 -> dia 5
+        # dia 2, dia 3, dia 4, dia 5 -> dia 6
 
     def crear_secuencias(self, datos, longitud_secuencia):
-        X, y = [], [] # Esta lista es interna en la funcion. Solo para una variable
-        for i in range(len(datos) - longitud_secuencia + 1):
+        X = [] # Esta lista es interna en la funcion. Solo para una variable
+        for i in range(len(datos) - longitud_secuencia):
             seq = datos[i:i + longitud_secuencia]        
             X.append(seq)
             
         X = torch.stack(X) # Convierte la lista de tensores en un tensor
         if self.X_multivariables is None:
             self.X_multivariables = X.unsqueeze(0)
+
         else:   
             self.X_multivariables = torch.cat((self.X_multivariables, X.unsqueeze(0)))
 
@@ -143,33 +171,53 @@ class TimeSeriesDataset(Dataset):
         # Tensor_X = [X_sp500; 
         #             X_oil; ...,]
         # Tensor_X = [X_bdi; X_sp500; X_oil; ...,]
-        
-
-
             
-    
-    def cambiar_modo(self, modo):
+        # tenemos [numero_input_feat, numero_muestras, longitud_secuencia]
+        # queremos [longitud_secuencia, numero_muestras, numero_input_feat]
+        # Tensor_X = Tensor_X.permute(2, 1, 0)
+        # No olvides la label
+
+    def cambiar_modo(self, modo='train'):
         # Chequea que el modo sea valido
-
         # Cambia al modo correcto
+        # no olvides actualizar los indices cada vez que añadas  datos
+        if modo == 'train':
+            self.modo = 'train'
+            self.current_X = self.X_multivariables[:, :int(self.train_ratio * self.X_multivariables.shape[1]), :]
+            self.current_y = self.label_final[:int(self.train_ratio * len(self.label_final))]
 
-        pass
+        elif modo == 'validation':
+            self.modo = 'validation'
+            self.current_X = self.X_multivariables[:, int(self.train_ratio * self.X_multivariables.shape[1]):int((self.train_ratio + self.validation_ratio) * self.X_multivariables.shape[1]), :]
+            self.current_y = self.label_final[int(self.train_ratio * len(self.label_final)):int((self.train_ratio + self.validation_ratio) * len(self.label_final))]
+
+        elif modo == 'test':
+            self.modo = 'test'
+            self.current_X = self.X_multivariables[:, int((self.train_ratio + self.validation_ratio) * self.X_multivariables.shape[1]):, :]
+            self.current_y = self.label_final[int((self.train_ratio + self.validation_ratio) * len(self.label_final)):]
+
+        else:
+            print(f'Modo {modo} no valido')
+
+    def hacer_crossvalidation(self, k=5):
+        ...
 
     def __len__(self):
     # Devuelde la longitud
-
-        pass
+        return self.current_X.shape[1]
 
     def __getitem__(self, idx):
-    # Primera fase de pruebas:
-    ## Devuelve el item en index idx
-
-    # Segunda fase de pruebas
-        pass
+    # Devuelve el item en index idx
+        return self.current_X[:, idx, :], self.current_y[idx]
 
     def __repr__(self):
-        return f'Current Shape {self.X_multivariables.shape}'
+        return f'Total Shape {self.X_multivariables.shape}\n Current Shape {self.current_X.shape}\n Current Label {self.current_y.shape}\n Modo {self.modo}'
 
-dataset = TimeSeriesDataset()
-dataset.añadir_datos('dataset')
-print(dataset)
+if __name__ == "__main__":
+    dataset = TimeSeriesDataset()
+    dataset.añadir_datos('dataset')
+    dataset.cambiar_modo('train')
+    print(dataset) 
+
+# Segunda parte, crea el archivo con la red neuronal
+# Tercera parte, crea el archivo con el entrenamiento
