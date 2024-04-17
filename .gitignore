@@ -35,6 +35,13 @@ wheels/
 *.manifest
 *.spec
 
+# Lighting stuff
+lightning_logs/
+examples/ejemplo_LSTM_real/tdataset/
+*/checkpoints/
+*.xlsx
+*.csv
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
