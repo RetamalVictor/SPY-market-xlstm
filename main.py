@@ -43,3 +43,5 @@ if __name__ == "__main__":
             print(f"  Inputs shape: {inputs.shape}")   # e.g., [64, 12, 6] if 12 bars x 6 features
             print(f"  Targets shape: {targets.shape}") # e.g., [64]
             break  # Just show the first batch for demonstration
+
+        dataset.find_sequences_with_large_time_diff()

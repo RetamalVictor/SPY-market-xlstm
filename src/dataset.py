@@ -9,9 +9,14 @@ from src.config import DatasetConfig
 class CustomTradingSequenceDataset(Dataset):
     def __init__(self, data_file: str, config: 'DatasetConfig'):
         """
-        Args:
-            data_file (str): Path to the trading data CSV file.
-            config (DatasetConfig): Configuration for the dataset.
+        Description: Handles creation of a time-series dataset for trading bar data.
+        args:
+            data_file (str): Path to CSV or Parquet file containing trading data.
+            config (DatasetConfig): Configuration object with dataset settings.
+        raises:
+            ValueError: If prediction_horizon is invalid or not enough rows for configuration.
+        return: 
+            CustomTradingSequenceDataset instance.
         """
         self.config = config
         self.transform = config.transform
@@ -33,23 +38,6 @@ class CustomTradingSequenceDataset(Dataset):
         else:
             df = pd.read_csv(data_file, memory_map=True)
 
-        # print(f"Reading CSV from {data_file}...")
-        # df = pd.read_csv(
-        #     data_file,
-        #     delimiter=",",
-        #     header=0,
-        #     memory_map=True,
-        #     dtype={
-        #         "DTYYYYMMDD": str,
-        #         "TIME": str,
-        #         "OPEN": float,
-        #         "HIGH": float,
-        #         "LOW": float,
-        #         "CLOSE": float,
-        #         "VOL": int,
-        #         "OPENINT": int
-        #     },
-        # )
         initial_len = len(df)
         print(f"Read {initial_len} rows from CSV.")
 
@@ -139,34 +127,26 @@ class CustomTradingSequenceDataset(Dataset):
             start_idx = self.valid_indices[idx]
             end_of_input = start_idx + self.sequence_length_bars
             target_idx = end_of_input + self.prediction_horizon_bars - 1
+            time_diffs = self.features[start_idx:end_of_input, 6]
 
-            # Check time differences in the sequence
-            time_diffs = self.features["TIME_DIFF"].iloc[start_idx:end_of_input].values
-
-            if all(time_diffs <= 5):  # If all time differences are valid, use this sequence
+            if (time_diffs <= 5).all():
                 input_seq = self.features[start_idx:end_of_input]
                 input_seq = torch.tensor(input_seq, dtype=torch.float32)
-
-                # Target (close price)
-                target = self.features[target_idx][3]  # [OPEN=0, HIGH=1, LOW=2, CLOSE=3, VOL=4, OPENINT=5]
+                target = self.features[target_idx, 3]
                 target = torch.tensor(target, dtype=torch.float32)
 
-                # Apply transformations if any
                 if self.transform:
                     input_seq = self.transform(input_seq)
                 if self.target_transform:
                     target = self.target_transform(target)
-
                 return input_seq, target
 
-            # If not valid, move to the next index
             idx += 1
 
-        # If no valid sequence is found, raise an error
-        raise IndexError(f"No valid sequence found at or after index {idx}. Try adjusting the dataset or filtering criteria.")
+        raise IndexError("No valid sequence found at or after the given index.")
 
     #############################
-    # 6. Debug Method
+    # 6. Debug Methods
     #############################
     def debug_sequence_datetimes(self, idx: int):
         """
@@ -188,3 +168,19 @@ class CustomTradingSequenceDataset(Dataset):
         print(f"\n[DEBUG] Sequence datetimes & time differences for dataset index {idx}:")
         for i, (dt, td) in enumerate(zip(seq_datetimes, time_diffs)):
             print(f"  {i:2d} -> {dt} | Time diff: {td:.1f} min")
+
+    def find_sequences_with_large_time_diff(self, threshold: float = 5.0):
+        """
+        Iterates through all possible sequences and prints those with any TIME_DIFF > threshold.
+        """
+        print(f"\nScanning for sequences with any TIME_DIFF > {threshold} minutes...")
+        total_bars = len(self.features)
+        limit = total_bars - self.sequence_length_bars - self.prediction_horizon_bars + 1
+
+        for start_idx in range(limit):
+            time_diffs = self.features[start_idx:start_idx + self.sequence_length_bars, 6]
+            if (time_diffs > threshold).any():
+                seq_datetimes = self.datetimes[start_idx:start_idx + self.sequence_length_bars]
+                print(f"\nSequence starting at index {start_idx}:")
+                for i, (dt, td) in enumerate(zip(seq_datetimes, time_diffs)):
+                    print(f"  {i:2d} -> {dt} | Time diff: {td:.1f} min")
