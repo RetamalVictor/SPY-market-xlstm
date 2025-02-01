@@ -1,79 +1,56 @@
 import torch
 import torch.nn as nn
-import pytorch_lightning as pl
+from src.models.base_model import BaseModel
 
-class BaselineLightingModel(pl.LightningModule):
+class SimpleNN(BaseModel):
     """
-    Description: Baseline model for lighting/trading data using an LSTM.
+    Description:
+        A simple feed-forward neural network that extends BaseModel.
+        This network consists of a linear layer, a ReLU activation, and an output layer.
     Args:
-        input_size (int): Number of input features per timestep.
-        hidden_size (int): Hidden size for the LSTM.
-        num_layers (int): Number of LSTM layers.
-        learning_rate (float): Learning rate for the optimizer.
+        input_size (int): Flattened input size.
+        hidden_size (int): Number of hidden units.
+        output_size (int): Number of output units.
     Raises:
-        ValueError: If input_size, hidden_size, or num_layers are not positive integers.
+        None
     Return:
-        A scalar prediction for each input sequence.
+        An instance of SimpleNN.
     """
-    def __init__(self, input_size: int, hidden_size: int, num_layers: int, learning_rate: float):
-        super(BaselineLightingModel, self).__init__()
-        if input_size <= 0 or hidden_size <= 0 or num_layers <= 0:
-            raise ValueError("input_size, hidden_size, and num_layers must be positive integers")
-        self.save_hyperparameters()
-        self.lstm = nn.LSTM(
-            input_size=input_size,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            batch_first=True
-        )
-        self.fc = nn.Linear(hidden_size, 1)
-        self.criterion = nn.MSELoss()
+    def __init__(self, input_size: int, hidden_size: int, output_size: int):
+        super(SimpleNN, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(hidden_size, output_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Description: Forward pass of the model.
+        Description:
+            Forward pass of the simple neural network.
+            Flattens the input and applies two linear layers with a ReLU.
         Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, sequence_length, input_size).
+            x (torch.Tensor): Input tensor of shape (batch, sequence_length, features).
         Return:
-            torch.Tensor: Output tensor of shape (batch_size).
+            torch.Tensor: Output tensor.
         """
-        lstm_out, _ = self.lstm(x)
-        last_output = lstm_out[:, -1, :]
-        output = self.fc(last_output)
-        return output.squeeze()
+        x = x.view(x.size(0), -1)
+        out = self.fc1(x)
+        out = self.relu(out)
+        out = self.fc2(out)
+        return out
 
-    def training_step(self, batch, batch_idx: int) -> torch.Tensor:
+    def initialize(self):
         """
-        Description: Training step for the model.
+        Description:
+            Initializes the weights of the network using Kaiming normal initialization.
         Args:
-            batch: Tuple containing (inputs, targets).
-            batch_idx (int): Index of the batch.
+            None
+        Raises:
+            None
         Return:
-            torch.Tensor: Loss value.
+            None
         """
-        inputs, targets = batch
-        preds = self.forward(inputs)
-        loss = self.criterion(preds, targets)
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
-        return loss
-
-    def validation_step(self, batch, batch_idx: int):
-        """
-        Description: Validation step for the model.
-        Args:
-            batch: Tuple containing (inputs, targets).
-            batch_idx (int): Index of the batch.
-        """
-        inputs, targets = batch
-        preds = self.forward(inputs)
-        loss = self.criterion(preds, targets)
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-
-    def configure_optimizers(self):
-        """
-        Description: Configures the optimizer.
-        Return:
-            torch.optim.Optimizer: The optimizer for the model.
-        """
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
-        return optimizer
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)

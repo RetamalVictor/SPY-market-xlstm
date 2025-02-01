@@ -28,6 +28,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+tb_logs/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

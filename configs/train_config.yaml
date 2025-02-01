@@ -1,0 +1,15 @@
+# train_config.yaml
+training:
+  batch_size: 64
+  hidden_size: 32
+  num_layers: 1
+  learning_rate: 0.001
+  epochs: 5
+  data_file: "data/oro_transformed.parquet"
+  warmup_steps: 100
+  total_steps: 1000
+
+dataset:
+  sequence_length_minutes: 60
+  prediction_horizon: "next_half_hour"
+  time_interval_minutes: 5
