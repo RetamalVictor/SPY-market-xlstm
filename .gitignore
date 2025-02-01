@@ -12,6 +12,7 @@ broker_api/
 papers/
 
 # Distribution / packaging
+requirements.txt
 .Python
 build/
 develop-eggs/
