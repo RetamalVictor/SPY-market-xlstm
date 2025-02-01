@@ -44,4 +44,4 @@ if __name__ == "__main__":
             print(f"  Targets shape: {targets.shape}") # e.g., [64]
             break  # Just show the first batch for demonstration
 
-        dataset.find_sequences_with_large_time_diff()
+        # dataset.find_sequences_with_large_time_diff()
