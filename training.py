@@ -6,6 +6,9 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
+import matplotlib
+matplotlib.use("Agg")
+
 from src.dataset import CustomTradingSequenceDataset
 from src.config import load_config
 from src.models.baseline import SimpleNN
@@ -39,7 +42,8 @@ def main(config_path: str):
         train_dataset,
         batch_size=training_config.batch_size,
         shuffle=True,
-        num_workers=4
+        num_workers=4,
+        persistent_workers=True
     )
     val_loader = DataLoader(
         val_dataset,
@@ -69,7 +73,10 @@ def main(config_path: str):
         warmup_steps=training_config.warmup_steps,
         total_steps=training_config.total_steps
     )
-
+    
+    # Merge all hyperparameters (both training and dataset) into a single dictionary
+    hyperparams = {**vars(training_config), **vars(dataset_config)}
+    model.save_hyperparameters(hyperparams)
     # Set up TensorBoard logger
     logger = TensorBoardLogger("tb_logs", name="lighting_model")
 

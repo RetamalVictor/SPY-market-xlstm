@@ -21,7 +21,7 @@ class GenericLightningModule(pl.LightningModule):
     def __init__(self, model: torch.nn.Module, optimizer_class=torch.optim.Adam,
                  optimizer_kwargs=None, loss_fn=None, warmup_steps: int = None, total_steps: int = None):
         super(GenericLightningModule, self).__init__()
-        self.save_hyperparameters(ignore=['model'])
+        self.save_hyperparameters(ignore=['model', 'loss_fn', 'optimizer_class'])
         self.model = model
         self.optimizer_class = optimizer_class
         self.optimizer_kwargs = optimizer_kwargs if optimizer_kwargs is not None else {}
