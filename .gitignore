@@ -30,6 +30,11 @@ wheels/
 .installed.cfg
 *.egg
 tb_logs/
+plots/
+*ipynb
+data
+*.png
+feature_selection_output
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

@@ -4,16 +4,11 @@ import pytorch_lightning as pl
 
 class InferencePlotCallback(pl.Callback):
     """
-    Description:
-        Lightning callback that runs inference on a provided validation DataLoader after
-        each validation epoch and logs a plot comparing predicted vs. real targets to TensorBoard.
+    Lightning callback that runs inference on a provided validation DataLoader after
+    each validation epoch and logs a plot comparing predicted vs. real targets to TensorBoard.
     Args:
         val_dataloader (torch.utils.data.DataLoader): DataLoader for validation data.
         num_batches (int): Number of batches to run inference on (default: 1).
-    Raises:
-        None
-    Return:
-        None
     """
     def __init__(self, val_dataloader, num_batches: int = 1):
         super().__init__()
@@ -22,14 +17,9 @@ class InferencePlotCallback(pl.Callback):
 
     def on_validation_epoch_end(self, trainer, pl_module):
         """
-        Description:
-            After validation ends, run inference on a subset of validation data and log a
-            plot of predicted vs. real targets to TensorBoard.
-        Args:
-            trainer: The PyTorch Lightning Trainer.
-            pl_module: The LightningModule being trained.
-        Return:
-            None
+        After validation ends, run inference on a subset of validation data and log a
+        plot of predicted vs. real targets (using only the last time step predictions)
+        to TensorBoard.
         """
         pl_module.eval()
         device = pl_module.device
@@ -42,26 +32,36 @@ class InferencePlotCallback(pl.Callback):
                 inputs, target = batch
                 inputs = inputs.to(device)
                 preds = pl_module(inputs)
-                predictions.extend(preds.cpu().tolist())
+                # If preds is a tuple, take the first element (the predictions).
+                if isinstance(preds, tuple):
+                    preds = preds[0]
+                # Assume preds shape is [B, T, output_dim] and we want the last time step.
+                last_preds = preds[:, -1, :]
+                predictions.extend(last_preds.cpu().tolist())
                 targets.extend(target.cpu().tolist())
                 batch_count += 1
                 if batch_count >= self.num_batches:
                     break
 
-        # Create the plot
-        fig, ax = plt.subplots(figsize=(10, 5))
-        ax.plot(targets, label="Real Target")
-        ax.plot(predictions, label="Predicted")
-        ax.set_xlabel("Sample Index")
-        ax.set_ylabel("Value")
-        ax.set_title("Real vs. Predicted")
-        ax.legend()
+        # For plotting, assume each target is a vector (e.g., length = output_dim).
+        # We'll plot the first sample's predicted vs. real target as two line plots.
+        if predictions and targets:
+            sample_pred = predictions[0]
+            sample_target = targets[0]
 
-        # Log the figure to TensorBoard
-        if trainer.logger is not None:
-            # trainer.logger.experiment is the TensorBoard SummaryWriter
-            trainer.logger.experiment.add_figure(
-                "Inference/Real_vs_Predicted", fig, global_step=trainer.global_step
-            )
-        plt.close(fig)
+            fig, ax = plt.subplots(figsize=(10, 5))
+            ax.plot(sample_target, label="Real Target", marker='o')
+            ax.plot(sample_pred, label="Predicted", marker='x')
+            ax.set_xlabel("Output Dimension Index")
+            ax.set_ylabel("Value")
+            ax.set_title("Real vs. Predicted (Last Time Step) for Sample 0")
+            ax.legend()
+
+            if trainer.logger is not None:
+                # trainer.logger.experiment is the TensorBoard SummaryWriter.
+                trainer.logger.experiment.add_figure(
+                    "Inference/Real_vs_Predicted", fig, global_step=trainer.global_step
+                )
+            plt.close(fig)
+
         pl_module.train()

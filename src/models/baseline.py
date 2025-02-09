@@ -22,6 +22,19 @@ class SimpleNN(BaseModel):
         self.relu = nn.ReLU()
         self.fc2 = nn.Linear(hidden_size, output_size)
 
+    @classmethod
+    def from_config(cls, input_size: int, config):
+        """
+        Description:
+            Instantiates SimpleNN using parameters from the model-specific configuration.
+        Args:
+            input_size (int): The number of input features.
+            config (SimpleNNConfig): Model-specific configuration (e.g., hidden_size).
+        Returns:
+            An instance of SimpleNN.
+        """
+        return cls(input_size=input_size, hidden_size=config.hidden_size, output_size=1)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Description:

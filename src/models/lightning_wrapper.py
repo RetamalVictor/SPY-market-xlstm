@@ -51,7 +51,8 @@ class GenericLightningModule(pl.LightningModule):
             torch.Tensor: The computed loss.
         """
         inputs, targets = batch
-        preds = self(inputs).squeeze(-1)
+        outputs, _ = self(inputs)  # outputs has shape [B, T, output_dim]
+        preds = outputs[:, -1, :]  # Take the final time step: shape [B, output_dim]
         loss = self.loss_fn(preds, targets)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
@@ -67,7 +68,8 @@ class GenericLightningModule(pl.LightningModule):
             dict: A dictionary containing predictions and targets.
         """
         inputs, targets = batch
-        preds = self(inputs).squeeze(-1)
+        outputs, _ = self(inputs)  # outputs has shape [B, T, output_dim]
+        preds = outputs[:, -1, :]  # Take the final time step: shape [B, output_dim]
         loss = self.loss_fn(preds, targets)
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return {"preds": preds, "targets": targets}
