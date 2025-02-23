@@ -7,7 +7,6 @@ class TrainingConfig:
     batch_size: int
     learning_rate: float
     epochs: int
-    data_dir: str
     warmup_steps: int
     total_steps: int
     num_features: int
@@ -35,25 +34,6 @@ class DatasetConfig:
     train_ratio: float = 0.7
     val_ratio: float = 0.15
 
-# @dataclass
-# class DatasetConfig:
-#     sequence_length_minutes: int
-#     prediction_horizon: str
-#     time_interval_minutes: int
-#     transform: Optional[Callable] = None
-#     target_transform: Optional[Callable] = None
-
-# Model-specific configuration dataclasses.
-@dataclass
-class SimpleNNConfig:
-    hidden_size: int
-
-@dataclass
-class LSTMConfig:
-    hidden_size: int
-    num_layers: int
-    dropout: float
-
 @dataclass
 class XLSTMConfig:
     hidden_size: int
@@ -66,8 +46,6 @@ class XLSTMConfig:
 
 # Mapping from model names (lowercase) to their model-specific configuration dataclasses.
 MODEL_CONFIG_MAPPING = {
-    "simplenn": SimpleNNConfig,
-    "lstm": LSTMConfig,
     "xlstm": XLSTMConfig,
 }
 
@@ -108,13 +86,7 @@ def get_model_class(model_name: str):
         The corresponding model class if found.
     """
     model_name = model_name.lower()
-    if model_name == "simplenn":
-        from src.models.baseline import SimpleNN
-        return SimpleNN
-    elif model_name == "lstm":
-        from src.models.lstm_model import LSTMModel
-        return LSTMModel
-    elif model_name == "xlstm":
+    if model_name == "xlstm":
         from src.models.xlstm_model import xLSTMWrapper
         return xLSTMWrapper
     else:
