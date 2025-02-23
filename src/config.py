@@ -6,6 +6,7 @@ import yaml
 class TrainingConfig:
     batch_size: int
     learning_rate: float
+    weight_decay:float
     epochs: int
     warmup_steps: int
     total_steps: int
@@ -33,6 +34,7 @@ class DatasetConfig:
     device:str = "cpu"
     train_ratio: float = 0.7
     val_ratio: float = 0.15
+    classification:bool = False
 
 @dataclass
 class XLSTMConfig:

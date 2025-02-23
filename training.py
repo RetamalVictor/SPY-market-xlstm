@@ -7,7 +7,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 from src.dataset_spy import TradingDataset  # now using the new DatasetConfig version
 from src.config import load_config, get_model_class
-from src.models.lightning_wrapper import GenericLightningModule
+from src.models.lightning_wrapper_classification import GenericLightningModule
 from src.callbacks.inference_callback import InferencePlotCallback
 
 def main(config_path: str):
@@ -76,8 +76,11 @@ def main(config_path: str):
     model = GenericLightningModule(
         model=scripted_model,
         optimizer_class=torch.optim.Adam,
-        optimizer_kwargs={'lr': training_config.learning_rate},
-        loss_fn=torch.nn.MSELoss(),
+        optimizer_kwargs={
+            "lr": float(training_config.learning_rate),
+            "weight_decay": float(training_config.weight_decay)
+        },        
+        loss_fn=torch.nn.BCEWithLogitsLoss(),
         warmup_steps=training_config.warmup_steps,
         total_steps=training_config.total_steps
     )
@@ -87,7 +90,7 @@ def main(config_path: str):
     model.save_hyperparameters(hyperparams)
     
     # Set up TensorBoard logger.
-    logger = TensorBoardLogger("tb_logs", name="spy_xlstm")
+    logger = TensorBoardLogger("tb_logs", name="spy_xlstm_clas")
 
     # Create the inference callback that logs predictions vs. real targets after validation.
     inference_callback = InferencePlotCallback(test_loader, num_batches=1)
@@ -95,10 +98,11 @@ def main(config_path: str):
 
     # Set up a ModelCheckpoint callback to save the best model based on validation loss.
     checkpoint_callback = ModelCheckpoint(
-        monitor="val_loss",
+        monitor="val_f1",
         mode="min",
-        save_top_k=2,
-        filename="best-{epoch:02d}-{val_loss:.2f}"
+        save_top_k=3,
+        save_last=True,
+        filename="best-{epoch:02d}-{val_f1:.2f}"
     )
 
     # Initialize the PyTorch Lightning trainer with GPU support if available.

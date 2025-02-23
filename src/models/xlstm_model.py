@@ -2,8 +2,8 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from src.models.base_model import BaseModel
 from typing import Tuple, Optional
+from src.models.base_model import BaseModel
 
 ###############################################
 # Helper Modules
@@ -82,9 +82,11 @@ class sLSTMBlock(nn.Module):
         self.up_proj_right = nn.Linear(hidden_size, int(hidden_size * proj_factor))
         self.down_proj = nn.Linear(int(hidden_size * proj_factor), input_size)
 
-    def forward(self, x: torch.Tensor, 
-                prev_state: Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
-               ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
+    def forward(
+        self, 
+        x: torch.Tensor,
+        prev_state: Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
         # x: [batch, input_size]
         # prev_state: (h_prev, c_prev, n_prev, m_prev), each [batch, hidden_size]
         h_prev, c_prev, n_prev, m_prev = prev_state
@@ -116,6 +118,7 @@ class sLSTMBlock(nn.Module):
         final_output = output + x
 
         return final_output, (h_t, c_t, n_t, m_t)
+
 
 ###############################################
 # mLSTM Block (Matrix LSTM)
@@ -149,9 +152,11 @@ class mLSTMBlock(nn.Module):
 
         self.group_norm = nn.GroupNorm(2, hidden_size)
 
-    def forward(self, x: torch.Tensor, 
-                prev_state: Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
-               ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
+    def forward(
+        self, 
+        x: torch.Tensor,
+        prev_state: Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
         # x: [batch, input_size]
         # prev_state: (h_prev, c_prev, n_prev, m_prev), each [batch, hidden_size]
         h_prev, c_prev, n_prev, m_prev = prev_state
@@ -192,11 +197,11 @@ class mLSTMBlock(nn.Module):
 
         return final_output, (h_t, c_t, n_t, m_t)
 
+
 ###############################################
 # xLSTM Model with Hardcoded Layers: ["s", "m", "s"]
 ###############################################
 
-# Define a type alias for a layer state.
 LayerState = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
 
 class xLSTM(BaseModel):
@@ -228,35 +233,44 @@ class xLSTM(BaseModel):
         self.block3 = sLSTMBlock(input_size, hidden_size, num_heads, proj_factor_slstm)
         self.num_layers = 3
 
-    def forward(self, x: torch.Tensor, 
-                state: Optional[Tuple[LayerState, LayerState, LayerState]] = None
-               ) -> Tuple[torch.Tensor, Tuple[LayerState, LayerState, LayerState]]:
+    def forward(
+        self,
+        x: torch.Tensor,
+        state: Optional[Tuple[LayerState, LayerState, LayerState]] = None
+    ) -> Tuple[torch.Tensor, Tuple[LayerState, LayerState, LayerState]]:
         """
+        Description:
+            Forward pass through the 3-layer xLSTM (s-m-s).
         Args:
-            x: Tensor of shape [batch, seq, input_size] if batch_first=True,
-               otherwise [seq, batch, input_size].
-            state: Optional tuple of 3 layer states, each a tuple (h, c, n, m) of shape [batch, hidden_size].
-        Returns:
-            outputs: Tensor of shape matching the input (with updated representations).
-            state: Tuple of 3 final layer states.
+            x (torch.Tensor): [batch, seq, input_size] if batch_first=True, else [seq, batch, input_size].
+            state (tuple): Optional tuple of 3 layer states, each a tuple (h, c, n, m).
+        Return:
+            outputs (torch.Tensor): [batch, seq, input_size] if batch_first=True, else [seq, batch, input_size].
+            state (tuple): The updated 3 layer states.
         """
         if self.batch_first:
             x = x.transpose(0, 1)
         seq_len, batch_size, _ = x.size()
 
         if state is None:
-            s1 = (torch.zeros(batch_size, self.hidden_size, device=x.device),
-                  torch.zeros(batch_size, self.hidden_size, device=x.device),
-                  torch.zeros(batch_size, self.hidden_size, device=x.device),
-                  torch.zeros(batch_size, self.hidden_size, device=x.device))
-            s2 = (torch.zeros(batch_size, self.hidden_size, device=x.device),
-                  torch.zeros(batch_size, self.hidden_size, device=x.device),
-                  torch.zeros(batch_size, self.hidden_size, device=x.device),
-                  torch.zeros(batch_size, self.hidden_size, device=x.device))
-            s3 = (torch.zeros(batch_size, self.hidden_size, device=x.device),
-                  torch.zeros(batch_size, self.hidden_size, device=x.device),
-                  torch.zeros(batch_size, self.hidden_size, device=x.device),
-                  torch.zeros(batch_size, self.hidden_size, device=x.device))
+            s1 = (
+                torch.zeros(batch_size, self.hidden_size, device=x.device),
+                torch.zeros(batch_size, self.hidden_size, device=x.device),
+                torch.zeros(batch_size, self.hidden_size, device=x.device),
+                torch.zeros(batch_size, self.hidden_size, device=x.device)
+            )
+            s2 = (
+                torch.zeros(batch_size, self.hidden_size, device=x.device),
+                torch.zeros(batch_size, self.hidden_size, device=x.device),
+                torch.zeros(batch_size, self.hidden_size, device=x.device),
+                torch.zeros(batch_size, self.hidden_size, device=x.device)
+            )
+            s3 = (
+                torch.zeros(batch_size, self.hidden_size, device=x.device),
+                torch.zeros(batch_size, self.hidden_size, device=x.device),
+                torch.zeros(batch_size, self.hidden_size, device=x.device),
+                torch.zeros(batch_size, self.hidden_size, device=x.device)
+            )
             state = (s1, s2, s3)
 
         outputs = []
@@ -268,9 +282,11 @@ class xLSTM(BaseModel):
             x_t, new_s3 = self.block3(x_t, s3)
             state = (new_s1, new_s2, new_s3)
             outputs.append(x_t)
+
         outputs = torch.stack(outputs)  # [seq, batch, input_size]
         if self.batch_first:
             outputs = outputs.transpose(0, 1)
+
         return outputs, state
 
     @classmethod
@@ -298,13 +314,16 @@ class xLSTM(BaseModel):
             proj_factor_mlstm=getattr(config, 'proj_factor_mlstm', 2)
         )
 
+
 ###############################################
-# xLSTMWrapper with final projection for output dimension control
+# xLSTMWrapper with final projection
 ###############################################
 
-class xLSTMWrapper(nn.Module):
+class xLSTMWrapper(BaseModel):
     """
-    Wraps an xLSTM module and applies a final linear projection so that the final output has a desired output dimension.
+    Wraps an xLSTM module and applies a final linear projection so that the final output
+    has a desired output dimension. If you are doing binary classification, set output_size=1
+    so that it produces a single logit.
     """
     def __init__(self, input_size: int, hidden_size: int, num_heads: int, output_size: int,
                  batch_first: bool = False, proj_factor_slstm: float = 4/3, proj_factor_mlstm: float = 2):
@@ -317,10 +336,25 @@ class xLSTMWrapper(nn.Module):
             proj_factor_slstm=proj_factor_slstm,
             proj_factor_mlstm=proj_factor_mlstm
         )
+        # For binary classification, set output_size = 1
         self.final_projection = nn.Linear(input_size, output_size)
 
-    def forward(self, x: torch.Tensor, state: Optional[Tuple[LayerState, LayerState, LayerState]] = None
-               ) -> Tuple[torch.Tensor, Tuple[LayerState, LayerState, LayerState]]:
+    def forward(
+        self,
+        x: torch.Tensor,
+        state: Optional[Tuple[LayerState, LayerState, LayerState]] = None
+    ) -> Tuple[torch.Tensor, Tuple[LayerState, LayerState, LayerState]]:
+        """
+        Description:
+            Forward pass of the xLSTMWrapper. First processes x through xLSTM, then
+            applies a final linear projection for either regression or classification.
+        Args:
+            x (torch.Tensor): [batch, seq, input_size] if batch_first=True, else [seq, batch, input_size].
+            state (tuple): Optional states for the 3-layer xLSTM.
+        Returns:
+            outputs (torch.Tensor): [batch, seq, output_size] if batch_first=True.
+            state (tuple): The updated 3-layer xLSTM states.
+        """
         outputs, state = self.xlstm(x, state)
         outputs = self.final_projection(outputs)
         return outputs, state
@@ -331,7 +365,7 @@ class xLSTMWrapper(nn.Module):
         Instantiates xLSTMWrapper using parameters from the model-specific configuration.
         Args:
             input_size (int): The number of input features.
-            output_size (int): The desired output dimension.
+            output_size (int): The desired output dimension. For binary classification, use 1.
             config: Configuration object with at least:
                     - hidden_size
                     - num_heads (must be 2)
@@ -352,12 +386,17 @@ class xLSTMWrapper(nn.Module):
             proj_factor_mlstm=getattr(config, 'proj_factor_mlstm', 2)
         )
 
-###############################################
-# Example Usage
-###############################################
+    def configure_scheduler(self, optimizer, warmup_steps, total_steps):
+        def lr_lambda(current_step: int):
+            if current_step < warmup_steps:
+                return float(current_step) / float(max(1, warmup_steps))
+            progress = float(current_step - warmup_steps) / float(max(1, total_steps - warmup_steps))
+            return 0.5 * (1.0 + math.cos(math.pi * progress))
 
+        return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+# Example Usage
 if __name__ == "__main__":
-    # Example configuration object.
     class XLSTMConfig:
         hidden_size = 256
         num_heads = 2  # Must be 2 in this hardcoded version.
@@ -366,10 +405,15 @@ if __name__ == "__main__":
         proj_factor_mlstm = 2
 
     config = XLSTMConfig()
-    input_size = 64   # number of input features
-    output_size = 20  # desired output dimension (e.g., predicting the next 20 inc values)
+    input_size = 64
 
-    model_xlstm = xLSTM.from_config(input_size=input_size, config=config)
-    print(model_xlstm)
+    # For binary classification, set output_size = 1
+    output_size = 1
+
     model_wrapper = xLSTMWrapper.from_config(input_size=input_size, output_size=output_size, config=config)
     print(model_wrapper)
+
+    # Example input: [batch=2, seq=10, features=64]
+    example_input = torch.randn(2, 10, 64)
+    outputs, _ = model_wrapper(example_input)
+    print("Output shape:", outputs.shape)  # Expect [2, 10, 1] for binary classification

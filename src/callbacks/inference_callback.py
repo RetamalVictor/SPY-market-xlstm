@@ -38,6 +38,9 @@ class InferencePlotCallback(pl.Callback):
                     preds = preds[0]
                 # Assume preds shape is [B, T, output_dim] and we want the last time step.
                 last_preds = preds[:, -1, :].squeeze(-1)
+                # Convert logits to probabilities
+                probs = torch.sigmoid(last_preds)
+                last_preds = (probs > 0.5).float()
                 predictions.extend(last_preds.cpu().tolist())
                 targets.extend(target_batch.cpu().tolist())
                 batch_count += 1

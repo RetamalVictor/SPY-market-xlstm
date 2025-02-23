@@ -1,11 +1,12 @@
 training:
   batch_size: 28
-  learning_rate: 0.003
-  epochs: 10
+  learning_rate: 1e-3
+  weight_decay: 1e-5
+  epochs: 100
   warmup_steps: 100
   total_steps: 1000
   num_features: 6
-  model_name: "xlstm"  # Options: "SimpleNN" or "LSTM"
+  model_name: "xlstm"
   output_size: 1
 
 dataset:
@@ -13,23 +14,15 @@ dataset:
   seq_len: 5
   mode: "train"
   device: "cuda"
-  train_ratio: 0.7
+  train_ratio: 0.75
   val_ratio: 0.15
-  norm_param_path: "data/other/test_norm.json"
-
-simplenn:
-  hidden_size: 280
-  dropout: 0.1
-
-lstm:
-  hidden_size: 280
-  num_layers: 2
-  dropout: 0.1
+  norm_param_path: "data/other/norm_params.json"
+  classification: true
 
 xlstm:
-  hidden_size: 32
+  hidden_size: 256
   num_heads: 2
   layers: ["s", "m", "s"]
   proj_factor_slstm: 1.3333   # Approximately 4/3
   proj_factor_mlstm: 2
-  dropout: 0.3
+  dropout: 0.1
