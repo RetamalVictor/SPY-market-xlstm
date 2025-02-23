@@ -2,7 +2,6 @@ training:
   batch_size: 28
   learning_rate: 0.003
   epochs: 10
-  data_dir: "data/oro"
   warmup_steps: 100
   total_steps: 1000
   num_features: 6
