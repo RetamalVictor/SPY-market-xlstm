@@ -1,20 +1,14 @@
-import os
-import glob
 import argparse
 import torch
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
 
-import matplotlib
-matplotlib.use("Agg")
-
-from src.dataset import CustomTradingSequenceDataset
+from src.dataset_spy import TradingDataset  # now using the new DatasetConfig version
 from src.config import load_config, get_model_class
 from src.models.lightning_wrapper import GenericLightningModule
 from src.callbacks.inference_callback import InferencePlotCallback
-from pytorch_lightning.callbacks import LearningRateMonitor
 
 def main(config_path: str):
     """
@@ -29,34 +23,16 @@ def main(config_path: str):
     Returns:
         None
     """
-    # Load training and dataset configuration from YAML.
+    # Load training, dataset, and model configuration from YAML.
     dataset_config, training_config, model_config = load_config(config_path)
     
-    # Use the data directory from the training configuration.
-    data_dir = training_config.data_dir
-    if not os.path.isdir(data_dir):
-        raise FileNotFoundError(f"Data directory '{data_dir}' not found.")
-    
-    # Locate the pre-split files in the data directory.
-    train_files = glob.glob(os.path.join(data_dir, "*_train.parquet"))
-    val_files = glob.glob(os.path.join(data_dir, "*_val.parquet"))
-    test_files = glob.glob(os.path.join(data_dir, "*_test.parquet"))
-
-    if not train_files or not val_files or not test_files:
-        raise FileNotFoundError("Could not find one or more of the required files: *_train.parquet, *_val.parquet, *_test.parquet in the directory: " + data_dir)
-    
-    train_file = train_files[0]
-    val_file = val_files[0]
-    test_file = test_files[0]
-    
-    print("Train file:", train_file)
-    print("Validation file:", val_file)
-    print("Test file:", test_file)
-    
-    # Load pre-split datasets.
-    train_dataset = CustomTradingSequenceDataset(train_file, dataset_config)
-    val_dataset = CustomTradingSequenceDataset(val_file, dataset_config)
-    test_dataset = CustomTradingSequenceDataset(test_file, dataset_config)
+    # Create dataset splits using the new dataset configuration.
+    dataset_config.mode = "train"
+    train_dataset = TradingDataset(dataset_config)
+    dataset_config.mode = "val"
+    val_dataset = TradingDataset(dataset_config)
+    dataset_config.mode = "test"
+    test_dataset = TradingDataset(dataset_config)
     
     print("Train dataset valid samples:", len(train_dataset))
     print("Validation dataset valid samples:", len(val_dataset))
@@ -73,7 +49,8 @@ def main(config_path: str):
         val_dataset,
         batch_size=training_config.batch_size,
         shuffle=False,
-        num_workers=4
+        num_workers=4,
+        persistent_workers=True
     )
     test_loader = DataLoader(
         test_dataset,
@@ -82,20 +59,20 @@ def main(config_path: str):
         num_workers=4
     )
 
-    # Calculate input size: for this example, we flatten the input sequence.
-    # The dataset has 7 features and the sequence length (in bars) is computed as:
-    # sequence_length_bars = dataset_config.sequence_length_minutes // dataset_config.time_interval_minutes
-    # input_size = sequence_length_bars * training_config.num_features
-    input_size = training_config.num_features
+    # Determine the actual input size from the training dataset.
+    # Each sample returned by the dataset is of shape (sequence_length_bars, actual_feature_dim)
+    sample_input, _ = train_dataset[0]
+    # sample_input shape: [seq_len, feature_dim]
+    input_size = sample_input.shape[-1]
     output_size = training_config.output_size
-    
+
     # Retrieve the model class using model mapping.
     model_cls = get_model_class(training_config.model_name)
     # Instantiate the underlying torch model using the model-specific configuration via the class method.
     torch_model = model_cls.from_config(input_size, output_size, model_config)
     scripted_model = torch.jit.script(torch_model)
 
-    # Wrap the torch model with the generic Lightning wrapper, enabling cosine warmup if configured
+    # Wrap the torch model with the generic Lightning wrapper.
     model = GenericLightningModule(
         model=scripted_model,
         optimizer_class=torch.optim.Adam,
@@ -105,13 +82,14 @@ def main(config_path: str):
         total_steps=training_config.total_steps
     )
     
-    # Merge all hyperparameters (both training and dataset) into a single dictionary
+    # Merge all hyperparameters (both training and dataset) into a single dictionary.
     hyperparams = {**vars(training_config), **vars(dataset_config)}
     model.save_hyperparameters(hyperparams)
-    # Set up TensorBoard logger
-    logger = TensorBoardLogger("tb_logs", name="lighting_model")
+    
+    # Set up TensorBoard logger.
+    logger = TensorBoardLogger("tb_logs", name="spy_xlstm")
 
-    # Create the inference callback that logs predictions vs. real targets after validation
+    # Create the inference callback that logs predictions vs. real targets after validation.
     inference_callback = InferencePlotCallback(test_loader, num_batches=1)
     lr_monitor = LearningRateMonitor(logging_interval='step')
 
@@ -123,16 +101,17 @@ def main(config_path: str):
         filename="best-{epoch:02d}-{val_loss:.2f}"
     )
 
-    # Initialize the PyTorch Lightning trainer with GPU support if available
+    # Initialize the PyTorch Lightning trainer with GPU support if available.
     trainer = pl.Trainer(
         max_epochs=training_config.epochs,
         logger=logger,
         accelerator="gpu" if torch.cuda.is_available() else None,
         devices=1 if torch.cuda.is_available() else None,
-        callbacks=[inference_callback, checkpoint_callback, lr_monitor]
+        callbacks=[inference_callback, checkpoint_callback, lr_monitor],
+        log_every_n_steps=1
     )
 
-    # Start training
+    # Start training.
     trainer.fit(model, train_loader, val_loader)
 
 if __name__ == "__main__":

@@ -1,18 +1,22 @@
 training:
-  batch_size: 128
-  learning_rate: 0.001
+  batch_size: 28
+  learning_rate: 0.003
   epochs: 10
   data_dir: "data/oro"
   warmup_steps: 100
   total_steps: 1000
   num_features: 6
   model_name: "xlstm"  # Options: "SimpleNN" or "LSTM"
-  output_size: 18
+  output_size: 1
 
 dataset:
-  sequence_length_minutes: 60
-  prediction_horizon: "next_one"
-  time_interval_minutes: 5
+  file_path: "data/other/seriesDiariasNumbersVictor.xlsx"
+  seq_len: 5
+  mode: "train"
+  device: "cuda"
+  train_ratio: 0.7
+  val_ratio: 0.15
+  norm_param_path: "data/other/test_norm.json"
 
 simplenn:
   hidden_size: 280
@@ -24,9 +28,9 @@ lstm:
   dropout: 0.1
 
 xlstm:
-  hidden_size: 256
+  hidden_size: 32
   num_heads: 2
   layers: ["s", "m", "s"]
   proj_factor_slstm: 1.3333   # Approximately 4/3
   proj_factor_mlstm: 2
-  dropout: 0.1
+  dropout: 0.3

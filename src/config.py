@@ -16,11 +16,32 @@ class TrainingConfig:
 
 @dataclass
 class DatasetConfig:
-    sequence_length_minutes: int
-    prediction_horizon: str
-    time_interval_minutes: int
-    transform: Optional[Callable] = None
-    target_transform: Optional[Callable] = None
+    """
+    Description:
+        Configuration for the TradingDataset.
+    Args:
+        file_path (str): Path to the Excel file.
+        seq_len (int): Sequence length (window size) to use for inputs.
+        mode (str): One of 'train', 'val', or 'test'.
+        device (str): Device on which to load the tensors (e.g., 'cpu' or 'cuda').
+        train_ratio (float): Proportion of data for training.
+        val_ratio (float): Proportion of data for validation.
+    """
+    file_path: str
+    seq_len: int
+    norm_param_path:str
+    mode: str = 'train'
+    device:str = "cpu"
+    train_ratio: float = 0.7
+    val_ratio: float = 0.15
+
+# @dataclass
+# class DatasetConfig:
+#     sequence_length_minutes: int
+#     prediction_horizon: str
+#     time_interval_minutes: int
+#     transform: Optional[Callable] = None
+#     target_transform: Optional[Callable] = None
 
 # Model-specific configuration dataclasses.
 @dataclass

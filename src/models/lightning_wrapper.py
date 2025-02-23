@@ -53,7 +53,7 @@ class GenericLightningModule(pl.LightningModule):
         inputs, targets = batch
         outputs, _ = self(inputs)  # outputs has shape [B, T, output_dim]
         preds = outputs[:, -1, :]  # Take the final time step: shape [B, output_dim]
-        loss = self.loss_fn(preds, targets)
+        loss = self.loss_fn(preds, targets.unsqueeze(-1))
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
@@ -70,7 +70,7 @@ class GenericLightningModule(pl.LightningModule):
         inputs, targets = batch
         outputs, _ = self(inputs)  # outputs has shape [B, T, output_dim]
         preds = outputs[:, -1, :]  # Take the final time step: shape [B, output_dim]
-        loss = self.loss_fn(preds, targets)
+        loss = self.loss_fn(preds, targets.unsqueeze(-1))
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         return {"preds": preds, "targets": targets}
 
