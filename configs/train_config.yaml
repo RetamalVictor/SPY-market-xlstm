@@ -2,9 +2,9 @@ training:
   batch_size: 28
   learning_rate: 1e-3
   weight_decay: 1e-5
-  epochs: 100
-  warmup_steps: 100
-  total_steps: 1000
+  epochs: 1000
+  warmup_steps: 1000
+  total_steps: 18000
   num_features: 6
   model_name: "xlstm"
   output_size: 1

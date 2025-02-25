@@ -82,7 +82,7 @@ class GenericLightningModule(pl.LightningModule):
             Optimizer (and scheduler) configuration.
         """
         optimizer = self.optimizer_class(self.parameters(), **self.optimizer_kwargs)
-        if self.warmup_steps is not None and self.total_steps is not None and hasattr(self.model, "configure_scheduler"):
+        if self.warmup_steps is not None and self.total_steps is not None: # and hasattr(self.model, "configure_scheduler"):
             scheduler = self.model.configure_scheduler(optimizer, self.warmup_steps, self.total_steps)
             return {
                 "optimizer": optimizer,

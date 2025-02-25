@@ -160,7 +160,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Inference script for a trained model using a preprocessed test file from a directory specified in the config."
     )
-    parser.add_argument("--checkpoint", type=str, required=False, default=r"tb_logs\spy_xlstm_clas\version_5\checkpoints\best-epoch=10-val_loss=0.69.ckpt",
+    parser.add_argument("--checkpoint", type=str, required=False, default=r"tb_logs\spy_xlstm_clas\version_6\checkpoints\best-epoch=87-val_f1=0.47.ckpt",
                         help="Path to the trained model checkpoint. If not provided, a new model will be created.")
     parser.add_argument("--config", type=str, required=False, default="configs/train_config.yaml",
                         help="Path to YAML configuration file (e.g., train_config.yaml)")
@@ -168,7 +168,7 @@ def main():
                         help="If set, plots predictions vs. real targets; otherwise, prints predictions.")
     parser.add_argument("--classification", action="store_true",
                         help="If set, treats the model output as binary classification (logits). Otherwise, uses regression logic.")
-    parser.add_argument("--num_samples", type=int, default=900,
+    parser.add_argument("--num_samples", type=int, default=100,
                         help="Number of samples to run inference on (default: 900)")
     parser.add_argument("--batch_size", type=int, default=64,
                         help="Batch size for inference (default: 64)")
