@@ -27,11 +27,7 @@ class GenericLightningModule(pl.LightningModule):
         # Always define multi-task losses so they exist even when not used.
         self.loss_class_fn = torch.nn.BCEWithLogitsLoss()
         self.loss_regr_fn = torch.nn.MSELoss()
-        if getattr(self.hparams, "output_size", 1) == 2:
-            self.multi_task = True
-        else:
-            self.multi_task = False
-            self.loss_fn = loss_fn if loss_fn is not None else torch.nn.BCEWithLogitsLoss()
+        self.multi_task = True
         self.warmup_steps = warmup_steps
         self.total_steps = total_steps
 
@@ -59,26 +55,28 @@ class GenericLightningModule(pl.LightningModule):
         inputs, targets = batch
         outputs, _ = self(inputs)
         preds = outputs[:, -1, :]  # shape: [B, output_size]
-        if self.multi_task:
-            class_pred = preds[:, 0]
-            regr_pred = preds[:, 1]
-            sign_target = targets[:, 0]
-            magnitude_target = targets[:, 1]
-            bce_loss = self.loss_class_fn(class_pred, sign_target)
-            mse_loss = self.loss_regr_fn(regr_pred, magnitude_target)
-            loss = bce_loss + mse_loss
-            prob = torch.sigmoid(class_pred)
-            preds_binary = (prob > 0.5).float()
-            acc = (preds_binary == sign_target).float().mean()
-            mae = torch.mean(torch.abs(regr_pred - magnitude_target))
-            self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True)
-            self.log("train_mae", mae, on_step=True, on_epoch=True, prog_bar=True)
-        else:
-            loss = self.loss_fn(preds, targets.unsqueeze(-1))
-            prob = torch.sigmoid(preds)
-            preds_binary = (prob > 0.5).float()
-            acc = (preds_binary == targets.unsqueeze(-1)).float().mean()
-            self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True)
+        
+        # Check if we are in multi-task mode (either by flag or target shape)
+        class_pred = preds[:, 0]
+        regr_pred = preds[:, 1]
+        sign_target = targets[:, 0]
+        magnitude_target = targets[:, 1]
+        bce_loss = self.loss_class_fn(class_pred, sign_target)
+        mse_loss = self.loss_regr_fn(regr_pred, magnitude_target)
+        loss = bce_loss + mse_loss
+        prob = torch.sigmoid(class_pred)
+        preds_binary = (prob > 0.5).float()
+        acc = (preds_binary == sign_target).float().mean()
+        mae = torch.mean(torch.abs(regr_pred - magnitude_target))
+        self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True)
+        self.log("train_mae", mae, on_step=True, on_epoch=True, prog_bar=True)
+        # else:
+        #     loss = self.loss_fn(preds, targets.unsqueeze(-1))
+        #     prob = torch.sigmoid(preds)
+        #     preds_binary = (prob > 0.5).float()
+        #     acc = (preds_binary == targets.unsqueeze(-1)).float().mean()
+        #     self.log("train_acc", acc, on_step=True, on_epoch=True, prog_bar=True)
+        
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 
@@ -97,36 +95,35 @@ class GenericLightningModule(pl.LightningModule):
         preds = outputs[:, -1, :]  # shape: [B, output_dim]
         
         # If targets have two elements per sample, use the multi-task branch.
-        if (targets.ndim > 1 and targets.shape[1] == 2) or self.multi_task:
-            class_pred = preds[:, 0]
-            regr_pred = preds[:, 1]
-            sign_target = targets[:, 0]
-            magnitude_target = targets[:, 1]
-            bce_loss = self.loss_class_fn(class_pred, sign_target)
-            mse_loss = self.loss_regr_fn(regr_pred, magnitude_target)
-            loss = bce_loss + mse_loss
-            self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-            prob = torch.sigmoid(class_pred)
-            preds_binary = (prob > 0.5).float()
-            acc = (preds_binary == sign_target).float().mean()
-            self.log("val_acc", acc, on_step=False, on_epoch=True, prog_bar=True)
-            f1 = torchmetrics.functional.f1_score(preds_binary, sign_target, task="binary")
-            self.log("val_f1", f1, on_step=False, on_epoch=True, prog_bar=True)
-            mae = torch.mean(torch.abs(regr_pred - magnitude_target))
-            self.log("val_mae", mae, on_step=False, on_epoch=True, prog_bar=True)
-            return {"val_loss": loss, "val_acc": acc, "val_f1": f1, "val_mae": mae}
-        else:
-            # Single-task branch: unsqueeze targets as they are scalars.
-            loss = self.loss_fn(preds, targets.unsqueeze(-1))
-            self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-            prob = torch.sigmoid(preds)
-            preds_binary = (prob > 0.5).float().squeeze(-1)
-            targets_int = targets.long()
-            acc = (preds_binary == targets_int).float().mean()
-            self.log("val_acc", acc, on_step=False, on_epoch=True, prog_bar=True)
-            f1 = torchmetrics.functional.f1_score(preds_binary, targets_int, task="binary")
-            self.log("val_f1", f1, on_step=False, on_epoch=True, prog_bar=True)
-            return {"val_loss": loss, "val_acc": acc, "val_f1": f1}
+        class_pred = preds[:, 0]
+        regr_pred = preds[:, 1]
+        sign_target = targets[:, 0]
+        magnitude_target = targets[:, 1]
+        bce_loss = self.loss_class_fn(class_pred, sign_target)
+        mse_loss = self.loss_regr_fn(regr_pred, magnitude_target)
+        loss = bce_loss + mse_loss
+        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        prob = torch.sigmoid(class_pred)
+        preds_binary = (prob > 0.5).float()
+        acc = (preds_binary == sign_target).float().mean()
+        self.log("val_acc", acc, on_step=False, on_epoch=True, prog_bar=True)
+        f1 = torchmetrics.functional.f1_score(preds_binary, sign_target, task="binary")
+        self.log("val_f1", f1, on_step=False, on_epoch=True, prog_bar=True)
+        mae = torch.mean(torch.abs(regr_pred - magnitude_target))
+        self.log("val_mae", mae, on_step=False, on_epoch=True, prog_bar=True)
+        return {"val_loss": loss, "val_acc": acc, "val_f1": f1, "val_mae": mae}
+        # else:
+        #     # Single-task branch: unsqueeze targets as they are scalars.
+        #     loss = self.loss_fn(preds, targets.unsqueeze(-1))
+        #     self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        #     prob = torch.sigmoid(preds)
+        #     preds_binary = (prob > 0.5).float().squeeze(-1)
+        #     targets_int = targets.long()
+        #     acc = (preds_binary == targets_int).float().mean()
+        #     self.log("val_acc", acc, on_step=False, on_epoch=True, prog_bar=True)
+        #     f1 = torchmetrics.functional.f1_score(preds_binary, targets_int, task="binary")
+        #     self.log("val_f1", f1, on_step=False, on_epoch=True, prog_bar=True)
+        #     return {"val_loss": loss, "val_acc": acc, "val_f1": f1}
 
     def configure_optimizers(self):
         """
