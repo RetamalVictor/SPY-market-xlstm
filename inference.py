@@ -1,19 +1,16 @@
 #!/usr/bin/env python
 import argparse
 import os
+import json
 import torch
 from torch.utils.data import DataLoader
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-# Optional: scikit-learn for metrics
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, mean_squared_error
-
-# Project modules
 from src.dataset_spy import TradingDataset
 from src.config import get_model_class, load_config
-from src.models.lightning_wrapper_classification import GenericLightningModule
+from src.models.lightning_wrapper_multitask import GenericLightningModule
 
 def run_inference(checkpoint: str,
                   config_path: str,
@@ -43,7 +40,10 @@ def run_inference(checkpoint: str,
     # 1. Load configuration.
     dataset_config, training_config, model_config = load_config(config_path)
     dataset_config.mode = "test"
-    
+
+    if getattr(dataset_config, "multi_task", False):
+        dataset_config.output_size = 2
+
     # 2. Load the test dataset.
     test_dataset = TradingDataset(dataset_config)
     print("Test dataset valid samples:", len(test_dataset))
@@ -72,7 +72,6 @@ def run_inference(checkpoint: str,
             model=torch_model,
             optimizer_class=torch.optim.Adam,
             optimizer_kwargs={'lr': training_config.learning_rate},
-            # If classification, use BCEWithLogitsLoss; otherwise, MSELoss or another regression loss
             loss_fn=torch.nn.BCEWithLogitsLoss() if classification else torch.nn.MSELoss(),
             warmup_steps=training_config.warmup_steps,
             total_steps=training_config.total_steps
@@ -91,28 +90,54 @@ def run_inference(checkpoint: str,
     device = next(model.parameters()).device
     model.to(device)
     
-    # 6. Run inference
+    # 6. Load norm_params for spy from the norm_param_path
+    if getattr(dataset_config, "normalize", True):
+        if not os.path.exists(dataset_config.norm_param_path):
+            raise ValueError(f"Normalization parameters file {dataset_config.norm_param_path} not found.")
+        with open(dataset_config.norm_param_path, "r") as f:
+            norm_params = json.load(f)
+        spy_min = norm_params["spy"]["min"]
+        spy_max = norm_params["spy"]["max"]
+    else:
+        spy_min, spy_max = None, None  # Not used if normalization is off
+    
     predictions = []
     targets = []
     with torch.no_grad():
         for inputs, target_batch in test_loader:
             inputs = inputs.to(device)
-            target_batch = target_batch.to(device)
-
+            target_batch = target_batch.to(device)  # shape: [B, 2] if multi-task
+            
             preds, _ = model(inputs)    # shape: [B, seq, output_dim]
-            preds = preds[:, -1, :]     # final time step => shape [B, output_dim]
-
+            preds = preds[:, -1, :]     # final time step, shape: [B, output_dim]
+            
             if classification:
-                # Convert logits -> probabilities -> binary predictions
+                # Classification branch (unchanged)
                 probs = torch.sigmoid(preds.squeeze(-1))  # shape [B]
                 preds_binary = (probs > 0.5).float()
                 predictions.extend(preds_binary.cpu().tolist())
+                targets.extend(target_batch.squeeze(-1).cpu().tolist())
             else:
-                # For regression, just use raw predictions
-                predictions.extend(preds.squeeze(-1).cpu().tolist())
-
-            # Collect targets
-            targets.extend(target_batch.cpu().tolist())
+                # Multi-task regression branch: convert predicted sign & normalized spy value
+                # Process predictions:
+                sign_logits = preds[:, 0]
+                sign_prob = torch.sigmoid(sign_logits)
+                sign_binary = (sign_prob > 0.5).float()  # 0 or 1
+                # Convert to ±1: 0 -> -1, 1 -> +1
+                sign_mult = sign_binary * 2 - 1  
+                spy_pred_norm = preds[:, 1]
+                # Denormalize the spy prediction
+                spy_denorm = ((spy_pred_norm + 1) / 2) * (spy_max - spy_min) + spy_min
+                final_pred = sign_mult * spy_denorm  # final predicted value
+                predictions.extend(final_pred.cpu().tolist())
+                
+                # Process targets similarly:
+                target_sign = target_batch[:, 0]
+                target_sign_mult = target_sign * 2 - 1
+                target_spy_norm = target_batch[:, 1]
+                target_spy_denorm = ((target_spy_norm + 1) / 2) * (spy_max - spy_min) + spy_min
+                final_target = target_sign_mult * target_spy_denorm
+                targets.extend(final_target.cpu().tolist())
     
     # 7. Evaluate or print results
     if evaluate:
@@ -120,47 +145,27 @@ def run_inference(checkpoint: str,
         plt.plot(targets, label="Real Target")
         plt.plot(predictions, label="Predicted")
         plt.xlabel("Sample Index")
-        plt.ylabel("Value" if not classification else "Class")
-        plt.title("Real vs. Predicted Targets")
+        plt.ylabel("Value")
+        plt.title("Real vs. Predicted Targets (Denormalized)")
         plt.legend()
         plt.savefig("inference_results.png", dpi=150)
         plt.close()
         print("Inference plot saved as 'inference_results.png'.")
     else:
-        # Print predictions vs. targets
-        for idx, pred in enumerate(predictions):
-            print(f"Sample {idx}: Predicted: {pred}, Real: {targets[idx]}")
-
-    # 8. Compute metrics
-    if classification:
-        # Convert to int in case we have floats
-        predictions_int = [int(p) for p in predictions]
-        targets_int = [int(t) for t in targets]
-
-        # Accuracy, precision, recall, F1
-        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-        acc = accuracy_score(targets_int, predictions_int)
-        prec = precision_score(targets_int, predictions_int, average='binary', zero_division=0)
-        rec = recall_score(targets_int, predictions_int, average='binary', zero_division=0)
-        f1 = f1_score(targets_int, predictions_int, average='binary', zero_division=0)
-        print("\nClassification Metrics (Binary):")
-        print(f"  Accuracy:  {acc:.4f}")
-        print(f"  Precision: {prec:.4f}")
-        print(f"  Recall:    {rec:.4f}")
-        print(f"  F1 Score:  {f1:.4f}")
-    else:
-        # Example regression metric: MSE
-        from sklearn.metrics import mean_squared_error
-        mse = mean_squared_error(targets, predictions)
-        print(f"\nRegression Metric:")
-        print(f"  MSE: {mse:.4f}")
+        for idx, (pred, real) in enumerate(zip(predictions, targets)):
+            print(f"Sample {idx}: Predicted: {pred}, Real: {real}")
+    
+    # 8. Compute and print a regression metric (e.g., MSE)
+    from sklearn.metrics import mean_squared_error
+    mse = mean_squared_error(targets, predictions)
+    print(f"\nRegression Metric (MSE): {mse:.4f}")
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Inference script for a trained model using a preprocessed test file from a directory specified in the config."
     )
-    parser.add_argument("--checkpoint", type=str, required=False, default=r"tb_logs\spy_xlstm_clas\version_6\checkpoints\best-epoch=87-val_f1=0.47.ckpt",
+    parser.add_argument("--checkpoint", type=str, required=False, default="path/to/checkpoint.ckpt",
                         help="Path to the trained model checkpoint. If not provided, a new model will be created.")
     parser.add_argument("--config", type=str, required=False, default="configs/train_config.yaml",
                         help="Path to YAML configuration file (e.g., train_config.yaml)")
@@ -169,9 +174,9 @@ def main():
     parser.add_argument("--classification", action="store_true",
                         help="If set, treats the model output as binary classification (logits). Otherwise, uses regression logic.")
     parser.add_argument("--num_samples", type=int, default=100,
-                        help="Number of samples to run inference on (default: 900)")
+                        help="Number of samples to run inference on.")
     parser.add_argument("--batch_size", type=int, default=64,
-                        help="Batch size for inference (default: 64)")
+                        help="Batch size for inference.")
     args = parser.parse_args()
 
     run_inference(

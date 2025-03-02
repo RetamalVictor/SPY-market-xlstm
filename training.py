@@ -5,28 +5,26 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from src.dataset_spy import TradingDataset  # now using the new DatasetConfig version
+from src.dataset_spy import TradingDataset
 from src.config import load_config, get_model_class
-from src.models.lightning_wrapper_classification import GenericLightningModule
+from src.models.lightning_wrapper_multitask import GenericLightningModule
 from src.callbacks.inference_callback import InferencePlotCallback
 
 def main(config_path: str):
     """
     Description:
-        Loads configuration from a YAML file and preprocessed dataset splits (train/val/test)
-        from a directory specified in the config, instantiates a model, sets up DataLoaders and callbacks 
-        (including an inference callback that runs on the test set), and starts training.
-    
+        Loads configuration from a YAML file, sets up dataset splits, instantiates a model, and starts training.
     Args:
-        config_path (str): Path to the YAML configuration file (e.g., train_config.yaml).
-    
+        config_path (str): Path to the YAML configuration file.
     Returns:
         None
     """
-    # Load training, dataset, and model configuration from YAML.
     dataset_config, training_config, model_config = load_config(config_path)
     
-    # Create dataset splits using the new dataset configuration.
+    # Set multi_task flag for dataset and adjust output_size if multi-task mode is enabled.
+    if getattr(dataset_config, "multi_task", False):
+        training_config.output_size = 2
+
     dataset_config.mode = "train"
     train_dataset = TradingDataset(dataset_config)
     dataset_config.mode = "val"
@@ -59,44 +57,32 @@ def main(config_path: str):
         num_workers=4
     )
 
-    # Determine the actual input size from the training dataset.
-    # Each sample returned by the dataset is of shape (sequence_length_bars, actual_feature_dim)
     sample_input, _ = train_dataset[0]
-    # sample_input shape: [seq_len, feature_dim]
     input_size = sample_input.shape[-1]
     output_size = training_config.output_size
 
-    # Retrieve the model class using model mapping.
     model_cls = get_model_class(training_config.model_name)
-    # Instantiate the underlying torch model using the model-specific configuration via the class method.
     torch_model = model_cls.from_config(input_size, output_size, model_config)
     scripted_model = torch.jit.script(torch_model)
 
-    # Wrap the torch model with the generic Lightning wrapper.
     model = GenericLightningModule(
         model=scripted_model,
         optimizer_class=torch.optim.Adam,
         optimizer_kwargs={
             "lr": float(training_config.learning_rate),
             "weight_decay": float(training_config.weight_decay)
-        },        
+        },
         loss_fn=torch.nn.BCEWithLogitsLoss(),
         warmup_steps=training_config.warmup_steps,
         total_steps=training_config.total_steps
     )
     
-    # Merge all hyperparameters (both training and dataset) into a single dictionary.
     hyperparams = {**vars(training_config), **vars(dataset_config)}
     model.save_hyperparameters(hyperparams)
     
-    # Set up TensorBoard logger.
-    logger = TensorBoardLogger("tb_logs", name="spy_xlstm_clas")
-
-    # Create the inference callback that logs predictions vs. real targets after validation.
+    logger = TensorBoardLogger("tb_logs", name="spy_xlstm_multitask")
     inference_callback = InferencePlotCallback(test_loader, num_batches=1)
     lr_monitor = LearningRateMonitor(logging_interval='step')
-
-    # Set up a ModelCheckpoint callback to save the best model based on validation loss.
     checkpoint_callback = ModelCheckpoint(
         monitor="val_f1",
         mode="min",
@@ -105,7 +91,6 @@ def main(config_path: str):
         filename="best-{epoch:02d}-{val_f1:.2f}"
     )
 
-    # Initialize the PyTorch Lightning trainer with GPU support if available.
     trainer = pl.Trainer(
         max_epochs=training_config.epochs,
         logger=logger,
@@ -115,7 +100,6 @@ def main(config_path: str):
         log_every_n_steps=1
     )
 
-    # Start training.
     trainer.fit(model, train_loader, val_loader)
 
 if __name__ == "__main__":

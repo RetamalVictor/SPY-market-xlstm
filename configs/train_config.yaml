@@ -7,17 +7,18 @@ training:
   total_steps: 18000
   num_features: 6
   model_name: "xlstm"
-  output_size: 1
+  output_size: 2
 
 dataset:
-  file_path: "data/other/seriesDiariasNumbersVictor.xlsx"
+  file_path: "data/seriesDiariasNumbersVictor.xlsx"
   seq_len: 5
   mode: "train"
   device: "cuda"
   train_ratio: 0.75
   val_ratio: 0.15
-  norm_param_path: "data/other/norm_params.json"
+  norm_param_path: "data/norm_params.json"
   classification: true
+  multi_task: true
 
 xlstm:
   hidden_size: 256
