@@ -1,15 +1,29 @@
-# train_config.yaml
 training:
-  batch_size: 64
-  hidden_size: 32
-  num_layers: 1
-  learning_rate: 0.001
-  epochs: 5
-  data_file: "data/oro_transformed.parquet"
-  warmup_steps: 100
-  total_steps: 1000
+  batch_size: 28
+  learning_rate: 1e-3
+  weight_decay: 1e-5
+  epochs: 1000
+  warmup_steps: 1000
+  total_steps: 18000
+  num_features: 6
+  model_name: "xlstm"
+  output_size: 2
 
 dataset:
-  sequence_length_minutes: 60
-  prediction_horizon: "next_half_hour"
-  time_interval_minutes: 5
+  file_path: "data/seriesDiariasNumbersVictor.xlsx"
+  seq_len: 5
+  mode: "train"
+  device: "cuda"
+  train_ratio: 0.75
+  val_ratio: 0.15
+  norm_param_path: "data/norm_params.json"
+  classification: true
+  multi_task: true
+
+xlstm:
+  hidden_size: 256
+  num_heads: 2
+  layers: ["s", "m", "s"]
+  proj_factor_slstm: 1.3333   # Approximately 4/3
+  proj_factor_mlstm: 2
+  dropout: 0.1
