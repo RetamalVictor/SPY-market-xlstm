@@ -1,4 +1,4 @@
-# High-Frequency Trading Model Training Framework
+# Trading Model Training Framework
 
 This repository contains a PyTorch Lightning-based training framework for high-frequency trading data. It uses a YAML configuration file to define hyperparameters (including those for data processing) and logs experiment details to TensorBoard. The project includes:
 
